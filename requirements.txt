@@ -1,0 +1,12 @@
+fastapi
+hypercorn
+celery
+redis
+minio
+requests
+numba
+janome
+openai
+python-multipart
+pytest
+pytest-dependency

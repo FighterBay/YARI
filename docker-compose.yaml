@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis/redis-stack
+    container_name: redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 20 1 --protected-mode no --loadmodule /opt/redis-stack/lib/redisearch.so --loadmodule /opt/redis-stack/lib/rejson.so
+    restart: always
+
+  minio:
+    image: docker.io/bitnami/minio:2024.4.6
+    container_name: minio
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/mnt/data
+    environment:
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: rootdoot
+      MINIO_DEFAULT_BUCKETS: assignment-bucket
+    restart: always
+
+  app:
+    build: .
+    container_name: app
+    depends_on:
+      - redis
+      - minio
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./config:/app/config
+      - ./ocr:/app/ocr
+      - ./logs:/app/logs
+      
+    command: hypercorn main.app:app --bind 0.0.0.0:8181
+    restart: always
+
+  celery_worker:
+    build: .
+    container_name: celery_worker
+    depends_on:
+      - redis
+    command: celery -A main.document_processor worker --loglevel=warning --autoscale=10,1
+    restart: always
+
+volumes:
+  minio_data:
+  redis_data:
