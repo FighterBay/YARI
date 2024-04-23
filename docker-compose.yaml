@@ -46,6 +46,8 @@ services:
     container_name: celery_worker
     depends_on:
       - redis
+    volumes:
+      - ./logs:/app/logs
     command: celery -A main.document_processor worker --loglevel=warning --autoscale=10,1
     restart: always
 
