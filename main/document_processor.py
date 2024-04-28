@@ -7,8 +7,8 @@ import numpy as np
 from celery import Celery, chord
 from main.redis_utils import RedisUtils, RedisStatus
 from main.openai_utils import get_embedding
-from main import tokenizer
-from main import utils
+from main import tokenizer, utils, enums
+
 
 
 config = utils.get_config()
@@ -88,11 +88,11 @@ def progress_update_callback(group_result, main_task_id):
             "Document ingestion task %s: %s", main_task_id, str(successful)
         )
         if successful:
-            redis_status.change_status(2)
+            redis_status.change_status(enums.FileStatus.PROCESSED.value) 
             return 1
 
         # else
-        redis_status.change_status(-1)
+        redis_status.change_status(enums.FileStatus.ERROR.value)
         return 0
     except Exception as err:
         # Log any exceptions that occur during progress update
@@ -195,7 +195,7 @@ def document_process(self, file_dict: dict):
 
         chord(sub_tasks)(progress_update_callback.s(self.request.id))
 
-        redis_status.change_status(1)
+        redis_status.change_status(enums.FileStatus.PROCESSING_EMBEDDING_EXTRACTION.value)
 
         return 1
     except Exception as err:
