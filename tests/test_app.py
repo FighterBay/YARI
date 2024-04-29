@@ -96,8 +96,7 @@ def test_do_ocr_invalid_url():
     response = client.post("/ocr", json=ocr_request.model_dump())
 
     assert response.status_code == 400
-    assert response.json()["status"] == "error"
-    assert response.json()["message"] == "Error accessing URL"
+    assert response.json()["detail"] == "Error accessing URL"
 
 
 def test_do_ocr_file_not_in_mock_db():
@@ -109,8 +108,7 @@ def test_do_ocr_file_not_in_mock_db():
     response = client.post("/ocr", json=ocr_request.model_dump())
 
     assert response.status_code == 404
-    assert response.json()["status"] == "error"
-    assert response.json()["message"] == "Not in mock DB."
+    assert response.json()["detail"] == "Not in mock DB."
 
 
 @pytest.mark.skip(reason="Document ingestion wouldn't be finished.")
@@ -138,5 +136,4 @@ def test_query_file_not_in_mock_db():
     response = client.post("/extract", json=query_data.model_dump())
 
     assert response.status_code == 400
-    assert response.json()["status"] == "error"
-    assert response.json()["message"] == "Not yet queued"
+    assert response.json()["detail"] == "Not yet queued"
