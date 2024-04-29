@@ -1,6 +1,11 @@
+"""
+This module provides enums.
+"""
 from enum import IntEnum
 
 # File status enum
+
+
 class FileStatus(IntEnum):
     """
     Provides enums for FILE_STATUS
@@ -10,6 +15,7 @@ class FileStatus(IntEnum):
     PROCESSING_SENTENCE_CHUNKING = 0
     PROCESSING_EMBEDDING_EXTRACTION = 1
     PROCESSED = 2
+
 
 FILE_STATUS_MESSAGES = {
     FileStatus.NOT_QUEUED: "File not queued.",

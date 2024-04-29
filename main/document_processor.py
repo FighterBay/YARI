@@ -10,7 +10,6 @@ from main.openai_utils import get_embedding
 from main import tokenizer, utils, enums
 
 
-
 config = utils.get_config()
 
 redis_host = config.get("redis-config", "host")
@@ -40,7 +39,6 @@ def process_sentence(idx, sentence, file_hash):
     try:
         sentence_dict = {}
         embedding = get_embedding(sentence)
-
 
         if len(embedding) != int(
             config.get("openai-config", "embedding_dimension")
@@ -88,7 +86,7 @@ def progress_update_callback(group_result, main_task_id):
             "Document ingestion task %s: %s", main_task_id, str(successful)
         )
         if successful:
-            redis_status.change_status(enums.FileStatus.PROCESSED.value) 
+            redis_status.change_status(enums.FileStatus.PROCESSED.value)
             return 1
 
         # else
@@ -148,6 +146,7 @@ def pre_process_sentences(sentences: list):
 
     return new_sentences
 
+
 @celery_app.task(bind=True)
 def document_process(self, file_dict: dict):
     """
@@ -183,8 +182,6 @@ def document_process(self, file_dict: dict):
         redis_status = RedisStatus(file_hash)
         redis_status.create_status()
 
-
-
         new_sentences = pre_process_sentences(sentences)
 
         redis_status.set_sentence_count(len(new_sentences))
@@ -195,7 +192,8 @@ def document_process(self, file_dict: dict):
 
         chord(sub_tasks)(progress_update_callback.s(self.request.id))
 
-        redis_status.change_status(enums.FileStatus.PROCESSING_EMBEDDING_EXTRACTION.value)
+        redis_status.change_status(
+            enums.FileStatus.PROCESSING_EMBEDDING_EXTRACTION.value)
 
         return 1
     except Exception as err:

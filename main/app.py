@@ -4,9 +4,10 @@ This module provides API endpoints to interact with.
 
 import hashlib
 import io
+from datetime import timedelta
+
 import requests
 
-from datetime import timedelta
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from minio import Minio
 from minio.error import S3Error
@@ -14,7 +15,6 @@ from requests.exceptions import RequestException
 
 from main import utils, document_processor, query_processor, models, enums
 from main.redis_utils import RedisStatus
-
 
 
 # Initialize the FastAPI app
@@ -68,7 +68,7 @@ async def upload_files(files: list[UploadFile] = File(...)):
             minio_client.make_bucket(MINIO_BUCKET_NAME)
     except S3Error as err:
         utils.logger.error("Error uploading file: %s", str(err))
-        raise HTTPException(status_code=500, detail=str(err))
+        raise HTTPException(status_code=500, detail=str(err)) from err
 
     for file in files:
         file_extension = file.filename.split(".")[-1].lower()
@@ -109,7 +109,7 @@ async def upload_files(files: list[UploadFile] = File(...)):
             utils.logger.info("File %s uploaded successfully.", file.filename)
         except S3Error as err:
             utils.logger.error("Error uploading file: %s", str(err))
-            raise HTTPException(status_code=500, detail=str(err))
+            raise HTTPException(status_code=500, detail=str(err)) from err
 
     utils.logger.info("Uploaded %d files successfully.", len(uploaded_files))
     return models.UploadResponse(status="success", data=uploaded_files)
@@ -130,7 +130,7 @@ async def do_ocr(ocr_request: models.OCRRequest):
     except RequestException as req_err:
         # Handle errors related to invalid or inaccessible URLs
         utils.logger.error("Error accessing URL: %s", str(req_err))
-        raise HTTPException(status_code=400, detail="Error accessing URL")
+        raise HTTPException(status_code=400, detail="Error accessing URL") from req_err
 
     file_hash = hashlib.md5(file_content).hexdigest()
     utils.logger.info("Generated file hash: %s", file_hash)
@@ -144,18 +144,20 @@ async def do_ocr(ocr_request: models.OCRRequest):
         utils.logger.error(
             "Error fetching %s status from Redis: %s", file_hash, str(err)
         )
-        raise HTTPException(status_code=500, detail=str(err))
+        raise HTTPException(status_code=500, detail=str(err)) from err
 
-    processing_status = enums.FileStatus(int(redis_status.get_status().get("status", 
-                                                                 enums.FileStatus.NOT_QUEUED.value)))
+    processing_status = enums.FileStatus(int(
+        redis_status.get_status().get("status",
+                                      enums.FileStatus.NOT_QUEUED.value))
+    )
     utils.logger.info(
         "File processing status: %s", enums.FILE_STATUS_MESSAGES[processing_status]
     )
-    
-    if processing_status not in {enums.FileStatus.NOT_QUEUED, 
-                                 enums.FileStatus.ERROR, 
+
+    if processing_status not in {enums.FileStatus.NOT_QUEUED,
+                                 enums.FileStatus.ERROR,
                                  enums.FileStatus.PROCESSED}:
-        raise HTTPException(status_code=400, 
+        raise HTTPException(status_code=400,
                             detail=enums.FILE_STATUS_MESSAGES[processing_status])
 
     if file_hash in MOCK_OCR_SAVED:
@@ -193,10 +195,11 @@ async def answer_query(query_data: models.QueryData):
             query_data.file_hash,
             str(err),
         )
-        raise HTTPException(status_code=500, detail=str(err))
+        raise HTTPException(status_code=500, detail=str(err)) from err
 
-    processing_status = enums.FileStatus(int(redis_status.get_status().get("status", 
-                                                                 enums.FileStatus.NOT_QUEUED.value)))
+    processing_status = enums.FileStatus(int(
+        redis_status.get_status().get("status",enums.FileStatus.NOT_QUEUED.value))
+        )
     utils.logger.info(
         "Processing status for file hash %s: %d: %s",
         query_data.file_hash,
@@ -230,11 +233,11 @@ async def answer_query(query_data: models.QueryData):
                 query_data.file_hash,
                 str(err),
             )
-            raise HTTPException(status_code=500, detail=str(err))
+            raise HTTPException(status_code=500, detail=str(err)) from err
     elif processing_status == enums.FileStatus.ERROR:
-        raise HTTPException(status_code=500, 
+        raise HTTPException(status_code=500,
                             detail=str(redis_status.get_status()))
-        
+
     return models.QueryResponse(
         status="processing", answer=redis_status.get_status()
     )
