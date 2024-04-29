@@ -29,6 +29,7 @@ def uploaded_files():
 
     return response
 
+
 @pytest.mark.dependency()
 def test_upload_files_success(uploaded_files):
     """
@@ -72,7 +73,6 @@ def test_supported_unsupported_extensions():
     assert len(response.json()["data"]) == 1
 
 
-
 @pytest.mark.dependency(depends=["test_upload_files_success"])
 def test_do_ocr_success(uploaded_files):
     """
@@ -95,7 +95,7 @@ def test_do_ocr_invalid_url():
     ocr_request = models.OCRRequest(signed_url=signed_url)
     response = client.post("/ocr", json=ocr_request.model_dump())
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert response.json()["status"] == "error"
     assert response.json()["message"] == "Error accessing URL"
 
@@ -108,9 +108,10 @@ def test_do_ocr_file_not_in_mock_db():
     ocr_request = models.OCRRequest(signed_url=signed_url)
     response = client.post("/ocr", json=ocr_request.model_dump())
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert response.json()["status"] == "error"
     assert response.json()["message"] == "Not in mock DB."
+
 
 @pytest.mark.skip(reason="Document ingestion wouldn't be finished.")
 def test_query_success():
@@ -136,6 +137,6 @@ def test_query_file_not_in_mock_db():
     query_data = models.QueryData(file_hash=file_hash, query=query)
     response = client.post("/extract", json=query_data.model_dump())
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert response.json()["status"] == "error"
     assert response.json()["message"] == "Not yet queued"
