@@ -45,7 +45,7 @@ def test_upload_files_unsupported_extension():
     Test case for uploading files with unsupported extensions.
     """
     files = [
-        ("files", ("file1.txt", b"file1_content", "text/plain")),
+        ("files", ("file1.bin", b"file1_content", "application/octet-stream")),
     ]
     response = client.post("/upload", files=files)
 
@@ -63,7 +63,7 @@ def test_supported_unsupported_extensions():
 
     with open(file2_path, "rb") as file2:
         files = [
-            ("files", ("file1.txt", b"file1_content", "text/plain")),
+            ("files", ("file1.bin", b"file1_content", "application/octet-stream")),
             ("files", ("png_file.png", file2.read(), "image/png")),
         ]
         response = client.post("/upload", files=files)
