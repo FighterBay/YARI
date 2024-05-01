@@ -7,6 +7,7 @@ from main import utils
 from main import redis_utils
 from main import openai_utils
 
+
 def merge_overlapping_windows(stored_window: dict):
     """
     Merge overlapping windows in the stored_window dictionary.
@@ -30,6 +31,7 @@ def merge_overlapping_windows(stored_window: dict):
             merged_windows[idx] = sorted(current_focus)
     return merged_windows
 
+
 def build_context(merged_windows: dict, doc_utils: redis_utils.RedisUtils, max_context_len: int):
     """
     Build the context string from the merged windows.
@@ -46,12 +48,14 @@ def build_context(merged_windows: dict, doc_utils: redis_utils.RedisUtils, max_c
     context = ""
     for val in merged_windows.values():
         if val:
-            context += "".join([doc_utils.get_content_by_id(idx)[0] for idx in val]) + "\n"
+            context += "".join([doc_utils.get_content_by_id(idx)
+                               for idx in val]) + "\n"
             if len(context) > max_context_len:
                 break
     return context
 
-def answer_query(query_dict: dict):
+
+async def answer_query(query_dict: dict):
     """
     Perform a query on stored documents based on the provided query string.
 
@@ -84,16 +88,20 @@ def answer_query(query_dict: dict):
         prompt_template = "Only use the provided context \
             to answer the query.\nContext: %s\nQuery: %s"
         prompt_len = len(prompt_template % ("", query))
-        max_context_len = int(config.get("openai-config", "gpt_context_len")) - prompt_len
+        max_context_len = int(config.get(
+            "openai-config", "gpt_context_len")) - prompt_len
 
         context = build_context(merged_windows, doc_utils, max_context_len)
         prompt = prompt_template % (context, query)
 
         completion = openai_utils.complete_prompt(prompt)
 
-        utils.logger.info("Prompt length: %d, Answer length: %d.", len(prompt), len(completion))
+        utils.logger.info("Prompt length: %d, Answer length: %d.",
+                          len(prompt), len(completion))
+
         return completion
 
     except Exception as err:
-        utils.logger.error("Error occurred, querying %s: %s", str(query_dict), str(err))
+        utils.logger.error("Error occurred, querying %s: %s",
+                           str(query_dict), str(err))
         raise

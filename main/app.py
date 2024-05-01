@@ -5,7 +5,7 @@ This module provides API endpoints to interact with.
 import hashlib
 import io
 from datetime import timedelta
-
+import time
 import requests
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -32,7 +32,7 @@ MINIO_ACCESS_KEY = config.get("minio-config", "access_key")
 MINIO_SECRET_KEY = config.get("minio-config", "secret_key")
 MINIO_BUCKET_NAME = config.get("minio-config", "bucket_name")
 # Allowed file extensions
-ALLOWED_EXTENSIONS = ["pdf", "tiff", "png", "jpeg"]
+ALLOWED_EXTENSIONS = ["pdf", "tiff", "png", "jpeg", "txt"]
 
 # Mock OCR saved data (only for simulation)
 MOCK_OCR_SAVED = mock_ocr_config["MOCK_OCR_SAVED"]
@@ -130,7 +130,8 @@ async def do_ocr(ocr_request: models.OCRRequest):
     except RequestException as req_err:
         # Handle errors related to invalid or inaccessible URLs
         utils.logger.error("Error accessing URL: %s", str(req_err))
-        raise HTTPException(status_code=400, detail="Error accessing URL") from req_err
+        raise HTTPException(
+            status_code=400, detail="Error accessing URL") from req_err
 
     file_hash = hashlib.md5(file_content).hexdigest()
     utils.logger.info("Generated file hash: %s", file_hash)
@@ -198,8 +199,8 @@ async def answer_query(query_data: models.QueryData):
         raise HTTPException(status_code=500, detail=str(err)) from err
 
     processing_status = enums.FileStatus(int(
-        redis_status.get_status().get("status",enums.FileStatus.NOT_QUEUED.value))
-        )
+        redis_status.get_status().get("status", enums.FileStatus.NOT_QUEUED.value))
+    )
     utils.logger.info(
         "Processing status for file hash %s: %d: %s",
         query_data.file_hash,
@@ -215,13 +216,17 @@ async def answer_query(query_data: models.QueryData):
 
     if processing_status == enums.FileStatus.PROCESSED:
         try:
-            answer = query_processor.answer_query(
+            start_time = time.time()
+            answer = await query_processor.answer_query(
                 {query_data.file_hash: query_data.query}
             )
+            end_time = time.time()
             utils.logger.info(
-                "Successfully extracted information for query '%s' from file hash %s",
+                "Successfully extracted information for query '%s' from file hash %s.\
+                      Time taken: %.2fs",
                 query_data.query,
                 query_data.file_hash,
+                end_time - start_time
             )
             return models.QueryResponse(
                 status="success", answer={"answer": answer}

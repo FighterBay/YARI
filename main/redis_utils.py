@@ -241,8 +241,8 @@ class RedisUtils:
             return index
         except redis.RedisError as err:
             utils.logger.info(
-                    "Index %s: not found. Creating it: %s", self.index_name, err
-                )
+                "Index %s: not found. Creating it: %s", self.index_name, err
+            )
 
             try:
                 schema = (
@@ -266,12 +266,12 @@ class RedisUtils:
                     definition=IndexDefinition(
                         prefix=[f"{self.document_name}:"]
                     ),
-                    stopwords=utils.ja_stop_words,
                 )
             except redis.RedisError as second_err:
                 # Log index creation error
                 utils.logger.error(
-                    "Failed to create index %s: %s", self.index_name, str(second_err)
+                    "Failed to create index %s: %s", self.index_name, str(
+                        second_err)
                 )
                 raise
 
@@ -349,6 +349,7 @@ class RedisUtils:
             tokenized_query = tokenizer.tokenize_and_construct_redis_query(
                 query
             )
+
             total_tokens_len = len(tokenized_query)
 
             # If the tokenized query is empty, return an empty dictionary
@@ -531,7 +532,8 @@ class RedisUtils:
 
         try:
             window_size = int(self.config.get("query-config", "window_size"))
-            cosine_link_threshold = float(self.config.get("query-config", "cosine_link_threshold"))
+            cosine_link_threshold = float(self.config.get(
+                "query-config", "cosine_link_threshold"))
             center_key = f"{self.document_name}:{idx}"
 
             window = [center_key]
@@ -543,11 +545,13 @@ class RedisUtils:
                     if not self.client.exists(key) or not self.client.exists(next_key):
                         break
 
-                    next_sim_score = self.get_item_by_key(key, ["next_sim_score"])
+                    next_sim_score = self.get_item_by_key(
+                        key, ["next_sim_score"])
                     if next_sim_score:
                         next_sim_score = float(next_sim_score[0].decode())
                         if next_sim_score == -1:
-                            next_sim_score = self.compute_cosine_similarity(key, next_key)
+                            next_sim_score = self.compute_cosine_similarity(
+                                key, next_key)
                             self.set_next_sim_score_by_key(key, next_sim_score)
 
                         if next_sim_score >= cosine_link_threshold:
@@ -575,8 +579,10 @@ class RedisUtils:
         Returns:
             float: The cosine similarity between the embeddings of the two keys.
         """
-        embedding1 = np.frombuffer(self.get_item_by_key(key1, ["embedding"])[0], dtype=np.float32)
-        embedding2 = np.frombuffer(self.get_item_by_key(key2, ["embedding"])[0], dtype=np.float32)
+        embedding1 = np.frombuffer(self.get_item_by_key(
+            key1, ["embedding"])[0], dtype=np.float32)
+        embedding2 = np.frombuffer(self.get_item_by_key(
+            key2, ["embedding"])[0], dtype=np.float32)
         return utils.cosine_similarity_numba(embedding1, embedding2)
 
     def get_item_by_key(self, key: str, fields: list):

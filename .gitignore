@@ -8,6 +8,7 @@ __pycache__/
 # Additional directories
 sample/
 ocr/*.json
+ocr/*.txt
 
 # C extensions
 *.so

@@ -3,8 +3,11 @@ This module ingests documents to be later
 used to provide context to LLMs for queries.
 """
 import json
+import time
 import numpy as np
+
 from celery import Celery, chord
+
 from main.redis_utils import RedisUtils, RedisStatus
 from main.openai_utils import get_embedding
 from main import tokenizer, utils, enums
@@ -37,12 +40,16 @@ def process_sentence(idx, sentence, file_hash):
         int: The index of the processed sentence.
     """
     try:
+
+        utils.logger.info("Processing %d in %s.", idx, file_hash)
         sentence_dict = {}
         embedding = get_embedding(sentence)
 
         if len(embedding) != int(
             config.get("openai-config", "embedding_dimension")
         ):
+            utils.logger.error(
+                "Embedding length doesn't match config's embedding length.")
             return 0
 
         sentence_dict["embedding"] = np.asarray(embedding)
@@ -67,7 +74,7 @@ def process_sentence(idx, sentence, file_hash):
 
 
 @celery_app.task()
-def progress_update_callback(group_result, main_task_id):
+def progress_update_callback(group_result: list, main_task_id: str, start_time: float):
     """
     Update the progress status based on the results of the group of tasks.
 
@@ -80,10 +87,11 @@ def progress_update_callback(group_result, main_task_id):
     """
     try:
         successful = all(result != 0 for result in group_result)
-
+        end_time = time.time()
         redis_status = RedisStatus(main_task_id)
         utils.logger.info(
-            "Document ingestion task %s: %s", main_task_id, str(successful)
+            "Document ingestion task %s: %s. Finished in: %.2fs", main_task_id, str(successful),
+            end_time-start_time
         )
         if successful:
             redis_status.change_status(enums.FileStatus.PROCESSED.value)
@@ -160,21 +168,27 @@ def document_process(self, file_dict: dict):
         int: 1 if the document processing was successful, 0 otherwise.
     """
     try:
+        start_time = time.time()
         file_hash, file_path = next(iter(file_dict.items()))
 
-        if not file_path.endswith(".json"):
-            utils.logger.error("Error: File is not a JSON file")
+        if file_path.endswith(".json"):
+            with open(file_path, "r", encoding="utf-8") as file_handle:
+                json_obj = json.load(file_handle)
+
+            text = json_obj.get(
+                "analyzeResult", {}).get("content", "")
+        elif file_path.endswith(".txt"):
+            with open(file_path, "r", encoding="utf-8") as file_handle:
+                text = file_handle.read()
+        else:
+            utils.logger.error("Error: File is not in supported format")
             return 0
 
-        with open(file_path, "r", encoding="utf-8") as file_handle:
-            json_obj = json.load(file_handle)
-
-        japanese_text = json_obj.get("analyzeResult", {}).get("content", "")
-        if not japanese_text:
-            utils.logger.error("Error: Japanese text not found in JSON")
+        if not text:
+            utils.logger.error("Error: Text not found in JSON")
             return 0
 
-        sentences = tokenizer.split_japanese_sentences(japanese_text)
+        sentences = tokenizer.split_japanese_sentences(text)
 
         # Drop index and recreate it
         RedisUtils(file_hash, drop=True, create=True)
@@ -184,13 +198,16 @@ def document_process(self, file_dict: dict):
 
         new_sentences = pre_process_sentences(sentences)
 
+        utils.logger.info("Document: %s chunked into %d chunks.",
+                          file_hash, len(new_sentences))
+
         redis_status.set_sentence_count(len(new_sentences))
         sub_tasks = [
             process_sentence.s(idx + 1, sentence, file_hash)
             for idx, sentence in enumerate(new_sentences)
         ]
 
-        chord(sub_tasks)(progress_update_callback.s(self.request.id))
+        chord(sub_tasks)(progress_update_callback.s(self.request.id, start_time))
 
         redis_status.change_status(
             enums.FileStatus.PROCESSING_EMBEDDING_EXTRACTION.value)
