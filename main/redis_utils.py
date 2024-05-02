@@ -2,6 +2,7 @@
 This module provides utility functions for interacting 
     with the Redis to help with queries and document ingestion.
 """
+import hashlib
 import redis
 import numpy as np
 
@@ -11,6 +12,123 @@ from redis.commands.search.indexDefinition import IndexDefinition
 
 from main import utils
 from main import tokenizer
+
+
+class RedisQueryCache:
+    """
+    Provides a utilities class for caching queries and completions.
+    """
+
+    def __init__(self, file_hash: str):
+        """
+        Initialize RedisStatus with the provided file hash.
+
+        Args:
+            file_hash (str): The hash of the file.
+
+        Returns:
+            None
+        """
+
+        self.config = utils.get_config()
+
+        redis_host = self.config.get("redis-config", "host")
+        redis_port = int(self.config.get("redis-config", "port"))
+
+        try:
+            # Connect to Redis
+            self.client = redis.Redis(
+                host=redis_host, port=redis_port, db=2, decode_responses=True
+            )
+        except redis.ConnectionError as err:
+            # Log connection error
+            utils.logger.error("Failed to connect to Redis: %s", str(err))
+            # Initialize client as None
+            self.client = None
+            raise
+
+        self.file_hash = file_hash
+
+    def __del__(self):
+        """
+        Destructor to close redis-client
+        """
+        if self.client is not None:
+            self.client.close()
+
+    def add_query_cache(self, query: str, completion: str, doc_version: int):
+        """
+        Adds query and completion to Redis Cache
+        Args:
+            query (str): The query.
+            completion (str): The completion.
+            doc_version (int): Document version.
+        Returns:
+            None
+        """
+        try:
+
+            # Pipeline multiple commands for atomic execution
+            pipe = self.client.pipeline()
+
+            # Generate query hash
+            query_hash = hashlib.md5(query.encode()).hexdigest()
+            query_name = f"{self.file_hash}:{query_hash}"
+            pipe.hset(name=query_name, key="completion", value=completion)
+            pipe.hset(name=query_name, key="cached_doc_version",
+                      value=doc_version)
+            pipe.execute()
+            utils.logger.info("Added %s, version %d to cache",
+                              query_name, doc_version)
+
+        except redis.RedisError as err:
+            # Log Redis error
+            utils.logger.error(
+                "Error adding to cache %s, query %s from Redis: %s",
+                self.file_hash,
+                query,
+                str(err),
+            )
+
+    def get_query_cache(self, query: str, doc_version: int):
+        """
+        Gets completion to a query from Redis Cache
+        Args:
+            query (str): The query.
+        Returns:
+            completion (str): The completion from the cache.
+        """
+        try:
+            # Generate query hash
+            query_hash = hashlib.md5(query.encode()).hexdigest()
+            query_name = f"{self.file_hash}:{query_hash}"
+            cached_doc_version = self.client.hget(
+                query_name, key="cached_doc_version")
+
+            if cached_doc_version is not None:
+                cached_doc_version = int(cached_doc_version)
+            else:
+                cached_doc_version = -1
+
+            if doc_version == cached_doc_version:
+                completion = self.client.hget(
+                    name=query_name, key="completion")
+                return completion
+
+            utils.logger.info(
+                "doc_version %d, cached_doc_version %d mismatch", doc_version, cached_doc_version)
+
+            return ""
+
+        except redis.RedisError as err:
+            # Log Redis error
+            utils.logger.error(
+                "Error getting from cache %s, query %s from Redis: %s",
+                self.file_hash,
+                query,
+                str(err),
+            )
+            return ""
 
 
 class RedisStatus:
@@ -88,6 +206,15 @@ class RedisStatus:
             pipe = self.client.pipeline()
             # Set initial status
             pipe.hset(name=self.file_hash, key="status", value=0)
+            # Check if file_hash exists
+            if self.client.exists(self.file_hash):
+                # Increment version by 1
+                pipe.hincrby(self.file_hash, "cached_doc_version")
+            else:
+                # Set initial version
+                pipe.hset(name=self.file_hash,
+                          key="cached_doc_version", value=1)
+
             # Set processed count to 0
             pipe.hset(name=self.file_hash, key="processed_count", value=0)
             # Set sentence count to 0
@@ -299,24 +426,24 @@ class RedisUtils:
             )
 
             pipe = self.client.pipeline()
-            doc_name = f"{self.document_name}:{sentence_properties['doc_chunk_num']}"
+            chunk_name = f"{self.document_name}:{sentence_properties['doc_chunk_num']}"
             pipe.hset(
-                name=doc_name,
+                name=chunk_name,
                 key="content",
                 value=sentence_properties["content"],
             )
             pipe.hset(
-                name=doc_name,
+                name=chunk_name,
                 key="raw_content",
                 value=sentence_properties["raw_content"],
             )
             pipe.hset(
-                name=doc_name,
+                name=chunk_name,
                 key="next_sim_score",
                 value=sentence_properties["next_sim_score"],
             )
             pipe.hset(
-                name=doc_name,
+                name=chunk_name,
                 key="embedding",
                 value=np.array(
                     sentence_properties["embedding"], dtype=np.float32
@@ -645,7 +772,7 @@ class RedisUtils:
         """
 
         try:
-            return self.client.hmget(key, "raw_content")[0].decode()
+            return self.client.hget(key, "raw_content").decode()
         except Exception as err:
             # Log the error
             utils.logger.error(

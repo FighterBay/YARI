@@ -198,8 +198,9 @@ async def answer_query(query_data: models.QueryData):
         )
         raise HTTPException(status_code=500, detail=str(err)) from err
 
+    doc_status = redis_status.get_status()
     processing_status = enums.FileStatus(int(
-        redis_status.get_status().get("status", enums.FileStatus.NOT_QUEUED.value))
+        doc_status.get("status", enums.FileStatus.NOT_QUEUED.value))
     )
     utils.logger.info(
         "Processing status for file hash %s: %d: %s",
@@ -218,7 +219,7 @@ async def answer_query(query_data: models.QueryData):
         try:
             start_time = time.time()
             answer = await query_processor.answer_query(
-                {query_data.file_hash: query_data.query}
+                {query_data.file_hash: query_data.query}, int(doc_status.get("cached_doc_version", 0))
             )
             end_time = time.time()
             utils.logger.info(
@@ -241,8 +242,8 @@ async def answer_query(query_data: models.QueryData):
             raise HTTPException(status_code=500, detail=str(err)) from err
     elif processing_status == enums.FileStatus.ERROR:
         raise HTTPException(status_code=500,
-                            detail=str(redis_status.get_status()))
+                            detail=str(doc_status))
 
     return models.QueryResponse(
-        status="processing", answer=redis_status.get_status()
+        status="processing", answer=doc_status
     )
