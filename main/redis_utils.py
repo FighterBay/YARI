@@ -209,11 +209,11 @@ class RedisStatus:
             # Check if file_hash exists
             if self.client.exists(self.file_hash):
                 # Increment version by 1
-                pipe.hincrby(self.file_hash, "cached_doc_version")
+                pipe.hincrby(self.file_hash, "doc_version")
             else:
                 # Set initial version
                 pipe.hset(name=self.file_hash,
-                          key="cached_doc_version", value=1)
+                          key="doc_version", value=1)
 
             # Set processed count to 0
             pipe.hset(name=self.file_hash, key="processed_count", value=0)

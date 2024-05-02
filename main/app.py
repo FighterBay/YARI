@@ -219,7 +219,8 @@ async def answer_query(query_data: models.QueryData):
         try:
             start_time = time.time()
             answer = await query_processor.answer_query(
-                {query_data.file_hash: query_data.query}, int(doc_status.get("cached_doc_version", 0))
+                {query_data.file_hash: query_data.query}, int(
+                    doc_status.get("doc_version", 0))
             )
             end_time = time.time()
             utils.logger.info(
